@@ -1,6 +1,10 @@
 source .venv/bin/activate
-python -m src.pipeline download --u2net
-python -m src.pipeline run --field-masks u2net
 
+
+python -m src.pipeline download --u2net
+
+
+
+完整流程
 
 python -u -m src.pipeline run --field-masks u2net --device mps
