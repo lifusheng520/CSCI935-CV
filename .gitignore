@@ -5,3 +5,6 @@
 /models/
 
 .gitignore
+
+/tmp/
+/ideas/
