@@ -1,0 +1,8 @@
+# Python 3.12 recommended by the assignment (also tested on local Python 3.9).
+torch==2.8.0
+torchvision==0.23.0
+numpy>=2.0,<2.3
+opencv-python-headless==4.13.0.92
+scikit-learn==1.6.1
+matplotlib==3.9.4
+gdown==5.2.2
