@@ -5,6 +5,14 @@ python -m src.pipeline download --u2net
 
 
 
-完整流程
+python -u -m src.pipeline run \
+  --field-masks u2net \
+  --seeds 42 43 44 45 46 \
+  --head-epochs 100 \
+  --finetune-epochs 100 \
+  --patience 0 \
+  --device mps
 
-python -u -m src.pipeline run --field-masks u2net --device mps
+--head-epochs 5: backbone will be frozen，training our modules up to 5 rounds
+--finetune-epochs 15: unfreeze the lastest layers of backbone，fine-tuning up to 15 rounds
+--patience 5: if loss doesn't decrease gradually in continuous 5 rounds, training process will be early stopped

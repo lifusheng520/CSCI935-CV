@@ -134,7 +134,7 @@ def train_one(args, root, splits, masks, mask_index, seed, output, device):
                                                  u2_weights=args.u2_weights)), output / "best.pt")
             else:
                 stale += 1
-            if stale >= args.patience:
+            if args.patience > 0 and stale >= args.patience:
                 print(f"Early stop {stage}: validation did not improve.", flush=True)
                 break
     checkpoint = torch.load(output / "best.pt", map_location=device, weights_only=True)
@@ -277,7 +277,8 @@ def main():
     p.add_argument("--batch-size", type=int, default=16)
     p.add_argument("--head-epochs", type=int, default=5)
     p.add_argument("--finetune-epochs", type=int, default=15)
-    p.add_argument("--patience", type=int, default=5)
+    p.add_argument("--patience", type=int, default=0,
+                   help="Early stopping after N non-improving epochs; 0 (default) disables it")
     p.add_argument("--head-lr", type=float, default=1e-3)
     p.add_argument("--finetune-lr", type=float, default=1e-4)
     p.add_argument("--backbone-lr", type=float, default=1e-5)
@@ -301,8 +302,10 @@ def main():
     torch.set_num_threads(min(4, os.cpu_count() or 1))
     cv2.setNumThreads(0)
     if args.command == "run":
-        if args.temperature <= 0 or args.size < 32 or args.batch_size < 1 or args.patience < 1:
-            parser.error("temperature > 0, size >= 32, batch-size/patience >= 1 required")
+        if args.temperature <= 0 or args.size < 32 or args.batch_size < 1:
+            parser.error("temperature > 0, size >= 32, batch-size >= 1 required")
+        if args.patience < 0:
+            parser.error("patience must be >= 0; 0 disables early stopping")
         if min(args.head_epochs, args.finetune_epochs) < 0 or len(set(args.seeds)) != len(args.seeds):
             parser.error("epochs must be nonnegative and seeds distinct")
         for key in ("mask_dropout", "quality_threshold", "density"):
