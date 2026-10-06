@@ -16,3 +16,4 @@ python -u -m src.pipeline run \
 --head-epochs 5: backbone will be frozen，training our modules up to 5 rounds
 --finetune-epochs 15: unfreeze the lastest layers of backbone，fine-tuning up to 15 rounds
 --patience 5: if loss doesn't decrease gradually in continuous 5 rounds, training process will be early stopped
+
