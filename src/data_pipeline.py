@@ -29,6 +29,7 @@ MANIFEST_COLUMNS = {
 DATASET_COLUMNS = {
     "path",
     "label",
+    "background",
     "split",
 }
 
@@ -36,7 +37,19 @@ DATASET_COLUMNS = {
 class RiceLeafDataset(Dataset):
     """Read rice-leaf images and labels from one dataset split."""
 
-    def __init__(self, csv_path: Path, dataset_root: Path, split: str, transform=None) -> None:
+    def __init__(
+        self,
+        csv_path: Path,
+        dataset_root: Path,
+        split: str,
+        transform=None,
+        background: str | None = None,
+    ) -> None:
+
+        if background not in {None, "White", "Field"}:
+            raise ValueError(
+                "background must be None, 'White', or 'Field'"
+            )
 
         self.dataset_root = dataset_root
         self.transform = transform
@@ -58,7 +71,13 @@ class RiceLeafDataset(Dataset):
                 )
 
             for row in reader:
-                if row["split"] == split:
+                correct_split = row["split"] == split
+                correct_background = (
+                    background is None
+                    or row["background"] == background
+                )
+
+                if correct_split and correct_background:
                     self.records.append({
                         "path": row["path"],
                         "label": int(row["label"]),
@@ -66,7 +85,8 @@ class RiceLeafDataset(Dataset):
 
         if not self.records:
             raise ValueError(
-                f"No records for split '{split}' in {csv_path}"
+                f"No records for split '{split}' "
+                f"and background '{background}' in {csv_path}"
             )
 
 
@@ -241,67 +261,126 @@ def print_split_summary( records: list[dict], random_seed: int) -> None:
     print(f"Testing images: {counts['test']}")
 
 
-def main() -> None:
+def prepare_dataloaders(
+    random_seed: int,
+    batch_size: int = 32,
+) -> tuple[
+    DataLoader,
+    DataLoader,
+    DataLoader,
+    DataLoader,
+    DataLoader,
+]:
+    """Return train, validation, mixed-test, white-test, and field-test loaders."""
     records = load_manifest(MANIFEST_PATH)
 
+    split_data = split_records(
+        records,
+        random_seed=random_seed,
+    )
+    split_path = (
+        SPLIT_DIRECTORY
+        / f"split_seed_{random_seed}.csv"
+    )
+
+    save_split(split_data, split_path)
+    print_split_summary(split_data, random_seed)
+    print(f"Split saved to: {split_path}\n")
+
+    # build the preprocessing object before passing it to each Dataset
+    image_transform = build_image_transform()
+
+    train_dataset = RiceLeafDataset(
+        csv_path=split_path,
+        dataset_root=DATASET_ROOT,
+        split="train",
+        transform=image_transform,
+    )
+    validation_dataset = RiceLeafDataset(
+        csv_path=split_path,
+        dataset_root=DATASET_ROOT,
+        split="validation",
+        transform=image_transform,
+    )
+    mixed_test_dataset = RiceLeafDataset(
+        csv_path=split_path,
+        dataset_root=DATASET_ROOT,
+        split="test",
+        transform=image_transform,
+    )
+    white_test_dataset = RiceLeafDataset(
+        csv_path=split_path,
+        dataset_root=DATASET_ROOT,
+        split="test",
+        transform=image_transform,
+        background="White",
+    )
+    field_test_dataset = RiceLeafDataset(
+        csv_path=split_path,
+        dataset_root=DATASET_ROOT,
+        split="test",
+        transform=image_transform,
+        background="Field",
+    )
+
+    train_loader = build_dataloader(
+        dataset=train_dataset,
+        batch_size=batch_size,
+        shuffle=True,
+    )
+    validation_loader = build_dataloader(
+        dataset=validation_dataset,
+        batch_size=batch_size,
+        shuffle=False,
+    )
+    mixed_test_loader = build_dataloader(
+        dataset=mixed_test_dataset,
+        batch_size=batch_size,
+        shuffle=False,
+    )
+    white_test_loader = build_dataloader(
+        dataset=white_test_dataset,
+        batch_size=batch_size,
+        shuffle=False,
+    )
+    field_test_loader = build_dataloader(
+        dataset=field_test_dataset,
+        batch_size=batch_size,
+        shuffle=False,
+    )
+
+    return (
+        train_loader,
+        validation_loader,
+        mixed_test_loader,
+        white_test_loader,
+        field_test_loader,
+    )
+
+
+def main() -> None:
+
     for random_seed in RANDOM_SEEDS:
-        # split
-        split_data = split_records(
-            records,
-            random_seed=random_seed,
-        )
-
-        split_path = (SPLIT_DIRECTORY / f"split_seed_{random_seed}.csv")
-
-        save_split(split_data, split_path)
-        print_split_summary(split_data, random_seed)
-        print(f"Split saved to: {split_path}\n")
-
-        # transform
-        image_transform = build_image_transform()
-
-        #prepare dataset
-        train_dataset = RiceLeafDataset(
-            csv_path=split_path,
-            dataset_root=DATASET_ROOT,
-            split="train",
-            transform=image_transform,
-        )
-        validation_dataset = RiceLeafDataset(
-            csv_path=split_path,
-            dataset_root=DATASET_ROOT,
-            split="validation",
-            transform=image_transform,
-        )
-        test_dataset = RiceLeafDataset(
-            csv_path=split_path,
-            dataset_root=DATASET_ROOT,
-            split="test",
-            transform=image_transform,
-        )
-
-        # prepare data loader
-        train_loader = build_dataloader(
-            dataset=train_dataset,
-            batch_size=32,
-            shuffle=True,
-        )
-        validation_loader = build_dataloader(
-            dataset=validation_dataset,
-            batch_size=32,
-            shuffle=False,
-        )
-        test_loader = build_dataloader(
-            dataset=test_dataset,
-            batch_size=32,
-            shuffle=False,
+        (
+            train_loader,
+            validation_loader,
+            mixed_test_loader,
+            white_test_loader,
+            field_test_loader,
+        ) = (
+            prepare_dataloaders(
+                random_seed=random_seed,
+                batch_size=32,
+            )
         )
 
         print(
             "DataLoader batches: "
             f"train={len(train_loader)}, "
             f"validation={len(validation_loader)}, "
-            f"test={len(test_loader)}\n"
+            f"mixed test={len(mixed_test_loader)}, "
+            f"white test={len(white_test_loader)}, "
+            f"field test={len(field_test_loader)}\n"
         )
 
 
