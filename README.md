@@ -24,7 +24,7 @@ github\CSCI935-CV\Dhan-Shomadhan
 
 conda activate 935cv
 
-cd ~/github/CSCI935-CV/src
+cd ~/github/CSCI935-CV
 
 ### Mask Generation
 
