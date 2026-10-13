@@ -1,0 +1,6 @@
+true_class,brown_spot,leaf_scald,rice_blast,rice_tungro,sheath_blight
+brown_spot,12,0,2,0,0
+leaf_scald,2,14,4,0,1
+rice_blast,1,3,23,0,3
+rice_tungro,0,1,1,14,2
+sheath_blight,0,0,0,1,32

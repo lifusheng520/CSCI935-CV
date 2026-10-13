@@ -1,0 +1,59 @@
+% Member 5 MDB-Net formal results, intended for Sections 6.1 and 6.2.
+% Values originate exclusively from formal_002, seeds 0--4; no MALG/Pilot metrics.
+\subsection{Experimental Settings}
+\label{sec:mdb-experimental-settings}
+We evaluated MDB-Net using an ImageNet-pretrained ResNet18 backbone
+(\texttt{IMAGENET1K\_V1}) on 1,106 rice-leaf images: 769 with white backgrounds
+and 337 with field backgrounds, spanning five disease classes.
+Five runs used seeds 0, 1, 2, 3, and 4. Each run employed a distinct 70/15/15
+train/validation/test split stratified jointly by disease class and background,
+yielding 774/166/166 images. Background swapping drew only from training-field images.
+
+Images were trained at $256\times256$ using a 448-pixel cache, batch size 16,
+and two data-loader workers. The encoder was frozen for three head-training epochs,
+followed by up to 30 fine-tuning epochs with patience eight. AdamW used learning
+rates $10^{-3}$ for the heads and $2\times10^{-4}$ for the backbone, weight decay
+0.01, label smoothing 0.1, and dropout 0.2. Segmentation loss weight was 1,
+mask pooling was used, background-swap and teacher-forcing probabilities were
+both 0.5, and field images contributed classification supervision.
+Mask statuses \texttt{ok} and \texttt{review} were accepted; supervised contrastive
+loss and class weighting were disabled. Model selection used the highest
+mixed-validation five-class macro-F1 during fine-tuning, with strict improvement.
+The same selected state within each seed was used for all three test scenarios.
+
+\subsection{Experimental Results}
+\label{sec:mdb-experimental-results}
+White and Field comprise the corresponding subsets of each run's held-out test
+set; Mixed comprises the complete test set. Accuracy and five-class macro-F1
+(zero division set to zero) were independently recomputed from saved per-image
+predictions. We report the arithmetic mean and sample standard deviation across
+five runs ($\mathrm{ddof}=1$), rather than metrics pooled over repeated test sets.
+Table~\ref{tab:mdb-formal-results} reports percentages; its standard deviations
+are percentage points. Fifteen seed-by-scenario confusion matrices were verified
+against the same prediction records. All five checkpoints and the recorded
+execution evidence passed the defined artifact-integrity verification.
+
+\begin{table}[htbp]
+\centering
+\caption{MDB-Net formal results over five seeds (mean $\pm$ sample SD, percent).}
+\label{tab:mdb-formal-results}
+\begin{tabular}{lcc}
+\hline
+Scenario & Accuracy & Macro-F1 \\
+\hline
+White & 81.90 $\pm$ 1.61 & 80.37 $\pm$ 2.27 \\
+Field & 68.00 $\pm$ 8.25 & 67.33 $\pm$ 9.03 \\
+Mixed & 77.71 $\pm$ 3.35 & 76.51 $\pm$ 3.93 \\
+\hline
+\end{tabular}
+\end{table}
+
+The earlier formal\_001 attempt was interrupted by an engineering monitor false
+positive and contributed no successful seed; this recovery run retained the
+frozen scientific protocol and preserved the failed attempt. Same-leaf and
+near-duplicate grouping remains unverified, and historical MALG/Pilot test
+exposure is acknowledged. Under the fixed \texttt{ok,review} policy, class-relative
+QC statistics did not change training-mask eligibility; this limited audit does
+not establish complete freedom from leakage. Segmentation masks are classical
+pseudo-labels: Dice/IoU measure agreement with those masks, not manual ground truth.
+The current Baseline uses different splits and is not a strictly paired comparison.

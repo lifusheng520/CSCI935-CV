@@ -1,0 +1,95 @@
+{
+  "schema_version": 1,
+  "model": "MDB-Net",
+  "backbone": "ResNet18",
+  "source_main_commit": "0481c4f10e5608d059cd9c489c82fbc27076bb71",
+  "local_git_commit": "edc7c8e3c2bfa7556617d712e61c42e99a10f8fd",
+  "source_code_sha256": {
+    "train_multitask.py": "5ba9c644e586089cb7579b9104c85dd0ad08c2ad377bc1c382675f6b2a22f982",
+    "train_resnet18.py": "b86d3038ea87c7925a0c1c040dbd2ac00b3713b0f1f3c14b03941319a35e04d0",
+    "make_masks.py": "089a892c1734598e8f1b0a52e234fdc348fc37c0a37f762508acf1c5cc607ec9",
+    "seg_leaf.py": "8d6f8fcb07a52cf622db29e610242ba536c19ce9ca2a78361d154075daf9f52e"
+  },
+  "readme_sha256": "797fe7b345988fd639e7bdef31b1d119a408822bd6b9404054f4ecf0427afad1",
+  "expected_seeds": [
+    0,
+    1,
+    2,
+    3,
+    4
+  ],
+  "protocol": {
+    "model": "MDB-Net",
+    "class_names": [
+      "brown_spot",
+      "leaf_scald",
+      "rice_blast",
+      "rice_tungro",
+      "sheath_blight"
+    ],
+    "split_ratios": [
+      0.7,
+      0.15,
+      0.15
+    ],
+    "stratification": "class_background",
+    "selection": "stage2_validation_macro_f1",
+    "macro_f1": "fixed_five_zero_division_0",
+    "std_ddof": 1
+  },
+  "scientific_fixed_implementation": {
+    "optimizer": "AdamW",
+    "classification_loss": "CrossEntropyLoss",
+    "segmentation_loss": "BCEWithLogits+Dice",
+    "selection": "maximum stage2 mixed-validation five-class Macro-F1; strict improvement",
+    "scheduler": "cosine with warmup in stage2"
+  },
+  "pretrained": {
+    "version": "ResNet18_Weights.IMAGENET1K_V1",
+    "source_file": "resnet18-f37072fd.pth",
+    "source": "ImageNet IMAGENET1K_V1",
+    "weights_download_authorized": false
+  },
+  "status": "ARCHIVAL_SCIENTIFIC_CONFIGURATION_NOT_EXECUTION_APPROVAL",
+  "required_branch": "feat/member5-formal-results",
+  "args": {
+    "data_root": "DATA_ROOT",
+    "seeds": [
+      0,
+      1,
+      2,
+      3,
+      4
+    ],
+    "img_size": 256,
+    "cache_size": 448,
+    "batch_size": 16,
+    "head_epochs": 3,
+    "epochs": 30,
+    "lr_head": 0.001,
+    "lr_backbone": 0.0002,
+    "weight_decay": 0.01,
+    "label_smoothing": 0.1,
+    "dropout": 0.2,
+    "patience": 8,
+    "lambda_seg": 1.0,
+    "pool": "mask",
+    "mil_topk_frac": 0.2,
+    "lambda_supcon": 0.0,
+    "supcon_temp": 0.1,
+    "bg_swap": 0.5,
+    "tf_prob": 0.5,
+    "field_train": "cls",
+    "mask_status": "ok,review",
+    "exclude_file": null,
+    "class_weights": false,
+    "from_scratch": false,
+    "weights_path": "WEIGHTS_PATH",
+    "workers": 2,
+    "save_models": true,
+    "out_name": "member5_mdb_formal_new",
+    "allow_missing": false
+  },
+  "execution_authorization": "NONE; archival configuration does not authorize new training",
+  "configuration_note": "Historical execution Git pins intentionally remain fixed. Use an independently reviewed external selected configuration for any future execution; the public main checkout is not claimed to be the historical training checkout."
+}
