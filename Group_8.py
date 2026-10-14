@@ -29,6 +29,7 @@ import json
 import math
 import random
 import re
+import sys
 import time
 from collections import Counter
 from concurrent.futures import ThreadPoolExecutor  # threads, not processes: forking after importing torch can deadlock
@@ -48,6 +49,38 @@ from sklearn.model_selection import train_test_split
 from torch.utils.data import DataLoader, Dataset
 from torchvision import models, tv_tensors
 from torchvision.transforms import v2
+
+
+# ----------------------------------------------------------------------------------
+# Progress bar
+# ----------------------------------------------------------------------------------
+def progress(iterable, total, desc, keep=True, width=30):
+    """Yield the items of `iterable` while drawing  desc |######......|  45% (90/200).
+
+    keep=False erases the bar when done (used for per-epoch bars, which are followed by a
+    one-line epoch summary). Nothing is drawn when stdout is redirected to a file.
+    """
+    show = sys.stdout.isatty() and total > 0
+    last = -1
+
+    def draw(i):
+        nonlocal last
+        pct = int(100 * i / total)
+        if pct != last:
+            last = pct
+            fill = int(width * i / total)
+            print(f"\r{desc} |{'#' * fill}{'.' * (width - fill)}| {pct:3d}% ({i}/{total})", end="", flush=True)
+
+    if show:
+        draw(0)
+    i = 0
+    for item in iterable:
+        yield item
+        i += 1
+        if show:
+            draw(i)
+    if show:
+        print() if keep else print("\r" + " " * (len(desc) + width + 24) + "\r", end="", flush=True)
 
 
 # ----------------------------------------------------------------------------------
@@ -79,6 +112,7 @@ def match_class(part: str):
     best, second = int(order[0]), int(order[1])
     return best if scores[best] >= 0.7 and scores[best] - scores[second] > 0.05 else None
 CLASS_NAMES = [n for n, _ in CLASS_KEYS]
+NC = len(CLASS_NAMES)
 DOMAINS = ["white", "field"]
 IMG_EXT = {".jpg", ".jpeg", ".png", ".bmp", ".tif", ".tiff"}
 IMAGENET_MEAN, IMAGENET_STD = (0.485, 0.456, 0.406), (0.229, 0.224, 0.225)
@@ -130,7 +164,7 @@ def build_cache(root: Path, samples, max_side: int) -> Path:
     todo = [s for s in samples if not (cache / s[0].with_suffix(".jpg")).exists()]
     if todo:
         print(f"Building cache ({len(todo)} images) in {cache} ...")
-    for rel, _, _ in todo:
+    for rel, _, _ in progress(todo, len(todo), "  resizing"):
         img = cv2.imread(str(root / rel), cv2.IMREAD_COLOR)  # honours EXIF orientation
         if img is None:
             raise SystemExit(f"Could not read image: {root / rel}")
@@ -470,9 +504,9 @@ def cmd_masks(a):
     cls_of = {str(rel): CLASS_NAMES[c] for rel, c, _ in white}
     if a.workers > 1:
         with ThreadPoolExecutor(a.workers) as ex:
-            results = list(ex.map(_process, jobs))
+            results = list(progress(ex.map(_process, jobs), len(jobs), "  segmenting"))
     else:
-        results = [_process(j) for j in jobs]
+        results = [_process(j) for j in progress(jobs, len(jobs), "  segmenting")]
 
     rows = []
     for rel, met in results:
@@ -831,13 +865,13 @@ def freeze_encoder_bn(model):
                 m.eval()
 
 
-def train_epoch(model, loader, opt, sched, scaler, device, crit, a, frozen):
+def train_epoch(model, loader, opt, sched, scaler, device, crit, a, frozen, desc="  train"):
     model.train()
     if frozen:
         freeze_encoder_bn(model)
     tot = dict(loss=0.0, cls=0.0, seg=0.0, supcon=0.0, n=0)
     amp = device.type == "cuda"
-    for x, m, y, hm, _ in loader:
+    for x, m, y, hm, _ in progress(loader, len(loader), desc, keep=False):
         x, m, y, hm = x.to(device), m.to(device), y.to(device), hm.to(device)
         use_gt = (hm > 0) & (torch.rand(len(y), device=device) < a.tf_prob)
         with torch.autocast(device_type=device.type, enabled=amp):
@@ -862,11 +896,11 @@ def train_epoch(model, loader, opt, sched, scaler, device, crit, a, frozen):
 
 
 @torch.no_grad()
-def evaluate(model, loader, device):
+def evaluate(model, loader, device, desc="  evaluate"):
     """Class logits for every image; Dice / IoU on the images that have a mask (predicted mask, threshold 0.5)."""
     model.eval()
     lg_all, ys, doms, dice, iou = [], [], [], [], []
-    for x, m, y, hm, dom in loader:
+    for x, m, y, hm, dom in progress(loader, len(loader), desc, keep=False):
         with torch.autocast(device_type=device.type, enabled=device.type == "cuda"):
             seg, lg = model(x.to(device))
         p = (torch.sigmoid(seg.float()) > 0.5).float().cpu()
@@ -951,7 +985,7 @@ def run_one(seed, a, recs, labels, domains, cache, device, out_dir):
     hist = []
 
     def val_metrics():
-        lg, y, dom, dice, _ = evaluate(model, vl, device)
+        lg, y, dom, dice, _ = evaluate(model, vl, device, f"  [seed {seed}] validate")
         f1 = f1_score(y, lg.argmax(1), labels=list(range(NC)), average="macro", zero_division=0)
         return float(f1), float((lg.argmax(1) == y).mean()), float(dice.mean()) if len(dice) else float("nan")
 
@@ -960,7 +994,8 @@ def run_one(seed, a, recs, labels, domains, cache, device, out_dir):
         set_encoder(model, False)
         opt = torch.optim.AdamW(dec, lr=a.lr_head, weight_decay=a.weight_decay)
         for ep in range(a.head_epochs):
-            t = train_epoch(model, tl, opt, None, scaler, device, crit, a, frozen=True)
+            t = train_epoch(model, tl, opt, None, scaler, device, crit, a, frozen=True,
+                            desc=f"  [seed {seed}] decoder {ep + 1}/{a.head_epochs}")
             f1, acc, dice = val_metrics()
             hist.append(dict(stage=1, epoch=ep + 1, **t, val_f1=f1, val_acc=acc, val_dice=dice))
             print(f"  [dec {ep + 1:>2}/{a.head_epochs}] cls {t['cls']:.3f} seg {t['seg']:.3f} supcon {t['supcon']:.3f} | val acc {acc:.3f} F1 {f1:.3f} dice {dice:.3f}")
@@ -973,7 +1008,8 @@ def run_one(seed, a, recs, labels, domains, cache, device, out_dir):
     best, best_state, bad = -1.0, None, 0
     for ep in range(a.epochs):
         t0 = time.time()
-        t = train_epoch(model, tl, opt, sched, scaler, device, crit, a, frozen=False)
+        t = train_epoch(model, tl, opt, sched, scaler, device, crit, a, frozen=False,
+                        desc=f"  [seed {seed}] fine-tune {ep + 1}/{a.epochs}")
         f1, acc, dice = val_metrics()
         hist.append(dict(stage=2, epoch=ep + 1, **t, val_f1=f1, val_acc=acc, val_dice=dice))
         print(f"  [ft {ep + 1:>2}/{a.epochs}] cls {t['cls']:.3f} seg {t['seg']:.3f} supcon {t['supcon']:.3f} | val acc {acc:.3f} F1 {f1:.3f} dice {dice:.3f} ({time.time() - t0:.0f}s)")
@@ -987,7 +1023,7 @@ def run_one(seed, a, recs, labels, domains, cache, device, out_dir):
     model.load_state_dict(best_state)
 
     # ---- test ------------------------------------------------------------------------------
-    lg, y, dom, dice, iou = evaluate(model, tel, device)
+    lg, y, dom, dice, iou = evaluate(model, tel, device, f"  [seed {seed}] test")
     pred = lg.argmax(1)
     res = dict(seed=seed, best_val_macro_f1=float(best), n_train=int(len(tr)), n_train_masked=int(n_masked), history=hist,
               scenarios={}, seg=dict(n=int(len(dice)), dice=float(dice.mean()) if len(dice) else None,
