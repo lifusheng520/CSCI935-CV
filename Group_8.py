@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """CSCI935 Group 8 -- MDB-Net: Mask-Guided Domain-Bridging Multi-Task Network for
 five-class rice leaf disease classification on the Dhan-Shomadhan dataset.
 
